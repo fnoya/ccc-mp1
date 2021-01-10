@@ -233,13 +233,15 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
         Address* sender;
         sender =(Address *) (data + sizeof(MessageHdr));
         printAddress(sender);
+        printf("--> ");
+        printAddress(&memberNode->addr);
+        printf("\n");
         long* sender_heartbeat;
         sender_heartbeat = (long *) (data + sizeof(MessageHdr) + sizeof(Address) + 1);
-        printf("Sender heartbeat %ld\n", *sender_heartbeat);
         
         switch (msg->msgType) {
             case JOINREQ: {
-                printf("Recibimos JOINREQ\n");
+                printf("JOINREQ\n");
                 memberNode->heartbeat++;
                 size_t msgsize = sizeof(MessageHdr) + sizeof(Address) + sizeof(long) + 1;
                 msg = (MessageHdr *) malloc(msgsize * sizeof(char));
@@ -251,20 +253,16 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
                 break;
             }
             case JOINREP: {
-                printf("Recibimos JOINREP\n");
-                size_t msgsize = sizeof(MessageHdr) + sizeof(Address) + sizeof(long) + 1;
-                msg = (MessageHdr *) malloc(msgsize * sizeof(char));
-                msg->msgType = JOINREQ;
-                memcpy((char *)(msg+1), &memberNode->addr.addr, sizeof(memberNode->addr.addr));
-                memcpy((char *)(msg+1) + 1 + sizeof(memberNode->addr.addr), &memberNode->heartbeat, sizeof(long));
-                emulNet->ENsend(&memberNode->addr, sender, (char *)msg, msgsize);
-                free(msg);
+                printf("JOINREP\n");
+
                 break;
             }
             case DUMMYLASTMSGTYPE: {
                 break;
             }
         }
+        printf("Sender heartbeat %ld\n", *sender_heartbeat);
+        printf("------FIN recvCallBack-----\n");
 
 
 #endif
@@ -328,6 +326,6 @@ void MP1Node::initMemberListTable(Member *memberNode) {
  */
 void MP1Node::printAddress(Address *addr)
 {
-    printf("%d.%d.%d.%d:%d \n",  addr->addr[0],addr->addr[1],addr->addr[2],
+    printf("%d.%d.%d.%d:%d ",  addr->addr[0],addr->addr[1],addr->addr[2],
                                                        addr->addr[3], *(short*)&addr->addr[4]) ;    
 }
