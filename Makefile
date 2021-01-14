@@ -7,7 +7,7 @@
 #* 
 #***********************
 
-CFLAGS =  -Wall -g -std=c++11 -Wno-unused-variable
+CFLAGS =  -Wall -g -std=c++11 -Wno-unused-variable -Wno-class-memaccess -Wno-format-overflow -Wno-sign-compare
 
 all: Application
 

@@ -223,6 +223,8 @@ void MP1Node::updateMemberList (int id, short port,	long heartbeat) {
     }
     if (found == NULL) {
         // Member not found in List, add
+        Address addedadr = createAddressFromIdPort(id, port);
+        log->logNodeAdd(&memberNode->addr, &addedadr);
         if (GOSSIP_PAYLOAD_SIZE > memberNode->memberList.size()) {
             MemberListEntry *newmember = (MemberListEntry *) malloc(sizeof(MemberListEntry) + 1);
             newmember->setid(id);
@@ -252,10 +254,12 @@ short MP1Node::loadGossipEntries (GossipMembershipEntry entries[]) {
     int pos = 0;
 
     memset(entries, 0, sizeof(GossipMessage::entries));
-    for (vector<MemberListEntry>::iterator it = memberNode->memberList.begin(); it != memberNode->memberList.end(); ++it, ++pos) {
-        entries[pos].id = it->getid();
-        entries[pos].port = it->getport();
-        entries[pos].heartbeat = it->getheartbeat();
+    for (vector<MemberListEntry>::iterator it = memberNode->memberList.begin(); it != memberNode->memberList.end(); ++it) {
+        if (it->gettimestamp() >= memberNode->heartbeat - TFAIL) {  // do not propagate failed nodes
+            entries[pos].id = it->getid();
+            entries[pos].port = it->getport();
+            entries[pos++].heartbeat = it->getheartbeat();
+        }
     }
     return (pos);
 }
@@ -267,12 +271,16 @@ void MP1Node::processGossipMessage (GossipMessage *msg) {
     }
 }
 
-void MP1Node::sendMessage (MsgTypes msgtype, int id, short port) {
+Address MP1Node::createAddressFromIdPort(int id, short port) {
     static char s[8];
     sprintf(s, "%d:%d", id, port);
     Address *addr = new Address(s);
-    sendMessage(msgtype, addr);
-    free(addr);
+    return *addr;
+}
+
+void MP1Node::sendMessage (MsgTypes msgtype, int id, short port) {
+    Address destinationaddr = createAddressFromIdPort(id, port);
+    sendMessage(msgtype, &destinationaddr);
 }
 
 void MP1Node::sendMessage (MsgTypes msgtype, Address *destination) { 
@@ -343,8 +351,6 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
 #ifdef DEBUGLOG
         sprintf(s, "Received message...");
         log->LOG(&memberNode->addr, s);
-
-
         Address* sender = &msg->sender;
         printAddress(sender);
         printf("--> ");
@@ -352,8 +358,6 @@ bool MP1Node::recvCallBack(void *env, char *data, int size ) {
         printf("\n");
         int i; for (i = 0; i < size; i++) { if (i > 0) printf(":"); printf("%02X", data[i]); } printf("\n");
         printf("------FIN recvCallBack-----\n");
-
-
 #endif
 
     return(true);
@@ -374,12 +378,63 @@ void MP1Node::nodeLoopOps() {
     memberNode->heartbeat++;
     memberNode->memberList.at(0).setheartbeat(memberNode->heartbeat);  // Update my heartbeat in member list
     memberNode->memberList.at(0).settimestamp(memberNode->heartbeat);  // Update my timestamp also
-    sendPing();
+    printNodes();
+    cleanFailedNodes();
+    if (memberNode->memberList.size() > 1) 
+        sendPing();
+    else {
+        #ifdef DEBUGLOG
+        log->LOG(&memberNode->addr, "NODE WITH NO MEMBERS IN MEMBER LIST!");
+        #endif
+        Address joinaddress = getJoinAddress();
+        introduceSelfToGroup(&joinaddress);
+        return;
+    }
+
+}
+
+void MP1Node::cleanFailedNodes() {
+    Address addrtoberemoved;
+    vector<MemberListEntry>::iterator it = memberNode->memberList.begin();
+    while (it != memberNode->memberList.end()) {
+        if (memberNode->heartbeat - TREMOVE >= it->gettimestamp()) {
+            addrtoberemoved = createAddressFromIdPort(it->id, it->port);
+            log->logNodeRemove(&memberNode->addr, &addrtoberemoved);
+            it = memberNode->memberList.erase(it);
+        } else 
+            ++it;
+    }
+}
+
+void MP1Node::printNodes() {
+#ifdef DEBUGLOG
+    Address addr;
+    static char s[200];
+    vector<MemberListEntry>::iterator it = memberNode->memberList.begin();
+    while (it != memberNode->memberList.end()) {
+        addr = createAddressFromIdPort(it->id, it->port);
+        if (memberNode->heartbeat - TFAIL >= it->gettimestamp()) 
+            sprintf(s, "%d:%d failed. (HB: %ld, TS: %ld)", it->id, it->port, it->getheartbeat(), it->gettimestamp());
+        else
+            sprintf(s, "%d:%d alive. (HB: %ld, TS: %ld)", it->id, it->port, it->getheartbeat(), it->gettimestamp());
+        log->LOG(&memberNode->addr, s);
+        ++it;
+    }
+#endif
 }
 
 void MP1Node::sendPing() {
-    long pos = random((u_long)1, memberNode->memberList.size() - 1);  // Entry 0 is always me 
-    sendMessage(PINGREQ, memberNode->memberList.at(pos).getid(), memberNode->memberList.at(pos).getport());
+    int offset = 0;
+    int size = memberNode->memberList.size();
+    int pos = (memberNode->heartbeat + offset) % (size-1) + 1;  // round robin pinging. Entry 0 is always me   // Random pinging //random((u_long)1, memberNode->memberList.size() - 1);  
+    while (offset < size  && memberNode->memberList.at(pos).gettimestamp() < memberNode->heartbeat - TFAIL)  // We selected a failed node AND haven't exceeded retries
+        pos = (memberNode->heartbeat + ++offset) % (size-1) + 1;
+    if (memberNode->memberList.at(pos).gettimestamp() > memberNode->heartbeat - TFAIL)  // Ping only not failed nodes
+        sendPing(memberNode->memberList.at(pos).getid(), memberNode->memberList.at(pos).getport());
+}
+
+void MP1Node::sendPing(int id, short port) {
+    sendMessage(PINGREQ, id, port);
 }
 
 /**

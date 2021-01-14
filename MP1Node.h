@@ -21,7 +21,7 @@
  */
 #define TREMOVE 20
 #define TFAIL 5
-#define GOSSIP_PAYLOAD_SIZE 5
+#define GOSSIP_PAYLOAD_SIZE 10
 
 /*
  * Note: You can change/add any functions in MP1Node.{h,cpp}
@@ -85,7 +85,10 @@ private:
 	void processGossipMessage (GossipMessage *msg);
 	short loadGossipEntries(GossipMembershipEntry entries[]);
 	void updateMemberList (int id, short port,	long heartbeat);
+	void cleanFailedNodes();
 	void sendPing();
+	void sendPing(int id, short port);
+	void printNodes();
 
 public:
 	MP1Node(Member *, Params *, EmulNet *, Log *, Address *);
@@ -108,6 +111,7 @@ public:
 	void printAddress(Address *addr);
 	int getIdFromAddress(Address *addr);
 	short getPortFromAddress(Address *addr);
+	Address createAddressFromIdPort(int id, short port);
 	virtual ~MP1Node();
 };
 
