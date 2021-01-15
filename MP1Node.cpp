@@ -211,6 +211,30 @@ void MP1Node::checkMessages() {
     return;
 }
 
+int MP1Node::getMostRecentMember() {
+    int pos = 1;
+    long ts = 0;
+    for (int i=1; i<memberNode->memberList.size(); i++) {
+        if (memberNode->memberList.at(i).gettimestamp() > ts){
+            ts = memberNode->memberList.at(i).getheartbeat();
+            pos = i;
+        }
+    }
+    return pos;
+}
+
+int MP1Node::getOldestMember() {
+    int pos = 1;
+    long ts = memberNode->heartbeat;
+    for (int i=1; i<memberNode->memberList.size(); i++) {
+        if (memberNode->memberList.at(i).gettimestamp() < ts){
+            ts = memberNode->memberList.at(i).getheartbeat();
+            pos = i;
+        }
+    }
+    return pos;
+}
+
 void MP1Node::updateMemberList (int id, short port,	long heartbeat) {
 
     if (id == getIdFromAddress(&memberNode->addr))  // It's me, just return my entry
@@ -235,7 +259,10 @@ void MP1Node::updateMemberList (int id, short port,	long heartbeat) {
             free(newmember);
         } else {
             // List full, replace one
-            long pos = random(1, GOSSIP_PAYLOAD_SIZE-1);  // Entry 0 is always me and cannot be replaced
+            //long pos = random(1, GOSSIP_PAYLOAD_SIZE-1);  // Random
+            long pos = getOldestMember();
+            Address addrtoberemoved = createAddressFromIdPort(memberNode->memberList.at(pos).getid(), memberNode->memberList.at(pos).getport());
+            log->logNodeRemove(&memberNode->addr, &addrtoberemoved);
             memberNode->memberList.at(pos).setid(id);
             memberNode->memberList.at(pos).setport(port);
             memberNode->memberList.at(pos).setheartbeat(heartbeat);
@@ -265,7 +292,7 @@ short MP1Node::loadGossipEntries (GossipMembershipEntry entries[]) {
 }
 
 void MP1Node::processGossipMessage (GossipMessage *msg) {
-    for (int i=0; i < msg->number_of_entries; i++) {
+    for (int i=msg->number_of_entries-1; i >= 0; i--) {  //Reverse order so sender always is kept or added to the list
         GossipMembershipEntry *entry = &msg->entries[i];
         updateMemberList(entry->id, entry->port, entry->heartbeat);
     }
@@ -411,6 +438,8 @@ void MP1Node::printNodes() {
     Address addr;
     static char s[200];
     vector<MemberListEntry>::iterator it = memberNode->memberList.begin();
+    if (it->id != getIdFromAddress(&memberNode->addr)) 
+        printf("PROBLEM\n");
     while (it != memberNode->memberList.end()) {
         addr = createAddressFromIdPort(it->id, it->port);
         if (memberNode->heartbeat - TFAIL >= it->gettimestamp()) 

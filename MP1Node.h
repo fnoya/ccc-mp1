@@ -21,7 +21,7 @@
  */
 #define TREMOVE 20
 #define TFAIL 5
-#define GOSSIP_PAYLOAD_SIZE 10
+#define GOSSIP_PAYLOAD_SIZE 5
 
 /*
  * Note: You can change/add any functions in MP1Node.{h,cpp}
@@ -89,6 +89,8 @@ private:
 	void sendPing();
 	void sendPing(int id, short port);
 	void printNodes();
+	int getMostRecentMember();
+	int getOldestMember();
 
 public:
 	MP1Node(Member *, Params *, EmulNet *, Log *, Address *);
